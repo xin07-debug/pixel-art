@@ -228,7 +228,7 @@
                         <input 
                           type="range" 
                           min="4" 
-                          max="100" 
+                          max="300" 
                           step="1"
                           value={frameCount} 
                           onChange={(e) => setFrameCount(Number(e.target.value))} 
@@ -263,7 +263,7 @@
                         <input 
                           type="range" 
                           min="1" 
-                          max={Math.min(frameCount, 20)} 
+                          max={frameCount} 
                           step="1"
                           value={columns} 
                           onChange={(e) => setColumns(Number(e.target.value))} 
