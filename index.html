@@ -66,6 +66,8 @@
         const DownloadIcon = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>;
         const AlertCircleIcon = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>;
         const WandIcon = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M15 4V2"/><path d="M15 16v-2"/><path d="M8 9h2"/><path d="M20 9h2"/><path d="M17.8 11.8 19 13"/><path d="M15 9h0"/><path d="M17.8 6.2 19 5"/><path d="m3 21 9-9"/><path d="M12.2 6.2 11 5"/></svg>;
+        const GridIcon = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>;
+        const ShieldIcon = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>;
 
         const App = () => {
           const [videoUrl, setVideoUrl] = useState(null);
@@ -80,7 +82,10 @@
           // 抠图参数
           const [removeBg, setRemoveBg] = useState(false);
           const [keyColor, setKeyColor] = useState('#00ff00'); // 默认绿色
-          const [tolerance, setTolerance] = useState(100); // 容差
+          const [enableSecondColor, setEnableSecondColor] = useState(false); // 是否启用第二种颜色
+          const [keyColor2, setKeyColor2] = useState('#cccccc'); // 默认灰色
+          const [tolerance, setTolerance] = useState(60); // 容差
+          const [protectBody, setProtectBody] = useState(false); // 新增：保护人物内部
           
           // 状态
           const [isProcessing, setIsProcessing] = useState(false);
@@ -130,27 +135,82 @@
             } : null;
           };
 
-          // 核心抠图算法
-          const applyChromaKey = (ctx, width, height, color, tolerance) => {
+          // 核心抠图算法 - 支持双色 & 连通域保护
+          const applyChromaKey = (ctx, width, height, colors, tolerance, protectBody) => {
             const imageData = ctx.getImageData(0, 0, width, height);
             const data = imageData.data;
-            const target = hexToRgb(color);
-            if (!target) return;
+            
+            const targets = colors.map(c => hexToRgb(c)).filter(Boolean);
+            if (targets.length === 0) return;
 
-            // 预计算阈值的平方，避免每次开方
             const toleranceSq = tolerance * tolerance;
 
-            for (let i = 0; i < data.length; i += 4) {
-                const r = data[i];
-                const g = data[i + 1];
-                const b = data[i + 2];
-                // 计算欧氏距离的平方
-                const distSq = (r - target.r) ** 2 + (g - target.g) ** 2 + (b - target.b) ** 2;
+            // 颜色匹配判断
+            const isMatch = (r, g, b) => {
+                for (let t of targets) {
+                    const distSq = (r - t.r) ** 2 + (g - t.g) ** 2 + (b - t.b) ** 2;
+                    if (distSq < toleranceSq) return true;
+                }
+                return false;
+            };
 
-                if (distSq < toleranceSq) {
-                    data[i + 3] = 0; // Alpha 设为 0 (完全透明)
+            if (!protectBody) {
+                // 原有逻辑：全局替换 (如果不开启保护)
+                for (let i = 0; i < data.length; i += 4) {
+                    if (data[i+3] === 0) continue;
+                    if (isMatch(data[i], data[i+1], data[i+2])) {
+                        data[i + 3] = 0; 
+                    }
+                }
+            } else {
+                // 新逻辑：从边缘泛洪 (Flood Fill) 保护内部
+                const stack = []; 
+                const getIndex = (x, y) => (y * width + x) * 4;
+
+                // 检查并推入栈
+                const checkAndPush = (x, y) => {
+                    const idx = getIndex(x, y);
+                    // 只有未处理过(非透明)且匹配颜色的才加入
+                    if (data[idx+3] !== 0 && isMatch(data[idx], data[idx+1], data[idx+2])) {
+                        stack.push([x, y]);
+                        data[idx+3] = 0; // 立即标记为透明（已访问）
+                    }
+                };
+
+                // 1. 扫描四周边框作为种子点
+                // 上下边
+                for (let x = 0; x < width; x++) {
+                    checkAndPush(x, 0);
+                    checkAndPush(x, height - 1);
+                }
+                // 左右边
+                for (let y = 1; y < height - 1; y++) {
+                    checkAndPush(0, y);
+                    checkAndPush(width - 1, y);
+                }
+
+                // 2. 广度优先搜索 (消除连通的背景)
+                while (stack.length > 0) {
+                    const [cx, cy] = stack.pop();
+                    
+                    // 4邻域
+                    const neighbors = [
+                        [cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]
+                    ];
+
+                    for (let [nx, ny] of neighbors) {
+                        if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+                            const nIdx = getIndex(nx, ny);
+                            // 如果邻居也是目标色且没被消除
+                            if (data[nIdx+3] !== 0 && isMatch(data[nIdx], data[nIdx+1], data[nIdx+2])) {
+                                data[nIdx+3] = 0; // 消除
+                                stack.push([nx, ny]);
+                            }
+                        }
+                    }
                 }
             }
+            
             ctx.putImageData(imageData, 0, 0);
           };
 
@@ -175,6 +235,16 @@
             });
           };
 
+          const applyCheckerboardPreset = () => {
+              setKeyColor('#ffffff'); // 白色
+              setKeyColor2('#cccccc'); // 常见棋盘格灰色
+              setEnableSecondColor(true);
+              setTolerance(50); 
+              setRemoveBg(true);
+              // 自动开启人物保护，因为棋盘格双色极易误伤人物
+              setProtectBody(true);
+          };
+
           // 核心生成逻辑
           const generate = async () => {
             if (!videoRef.current || !canvasRef.current) return;
@@ -193,10 +263,8 @@
               const frameWidth = Math.floor(videoMeta.width * scale);
               const frameHeight = Math.floor(videoMeta.height * scale);
 
-              // 准备 GIF 编码器 (如果需要)
               let gif = null;
               if (outputMode === 'gif') {
-                  // 动态获取 Worker 代码以避免跨域问题
                   try {
                       const workerBlob = await fetch('https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.worker.js').then(r => r.blob());
                       const workerUrl = URL.createObjectURL(workerBlob);
@@ -207,22 +275,18 @@
                           width: frameWidth,
                           height: frameHeight,
                           workerScript: workerUrl,
-                          // 移除 transparent 设置，让 gif.js 自动处理 alpha
-                          // transparent: 0x000000 
                       });
                   } catch (e) {
                       throw new Error("初始化 GIF 组件失败，请检查网络连接（需要访问 CDN）。");
                   }
               }
 
-              // 设置画布尺寸
               if (outputMode === 'sprite') {
                   const cols = parseInt(columns);
                   const rows = Math.ceil(totalFrames / cols);
                   canvas.width = cols * frameWidth;
                   canvas.height = rows * frameHeight;
               } else {
-                  // GIF 模式只需要单帧大小的画布
                   canvas.width = frameWidth;
                   canvas.height = frameHeight;
               }
@@ -232,11 +296,18 @@
               const interval = videoMeta.duration / (totalFrames + 1);
               const delay = (interval * 1000); 
 
-              // 临时画布用于单帧处理（抠图用）
               const tempCanvas = document.createElement('canvas');
               tempCanvas.width = frameWidth;
               tempCanvas.height = frameHeight;
               const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+
+              const colorsToRemove = [];
+              if (removeBg) {
+                  colorsToRemove.push(keyColor);
+                  if (enableSecondColor) {
+                      colorsToRemove.push(keyColor2);
+                  }
+              }
 
               for (let i = 0; i < totalFrames; i++) {
                 if (!videoRef.current) break;
@@ -244,25 +315,22 @@
                 const time = interval * (i + 1);
                 await seekToTime(video, time);
 
-                // 1. 先绘制到临时画布
                 tempCtx.clearRect(0, 0, frameWidth, frameHeight);
                 if (video.readyState >= 2) {
                     tempCtx.drawImage(video, 0, 0, videoMeta.width, videoMeta.height, 0, 0, frameWidth, frameHeight);
                 }
 
-                // 2. 如果开启了抠图，处理临时画布
                 if (removeBg) {
-                    applyChromaKey(tempCtx, frameWidth, frameHeight, keyColor, tolerance);
+                    // 传入 protectBody 参数
+                    applyChromaKey(tempCtx, frameWidth, frameHeight, colorsToRemove, tolerance, protectBody);
                 }
 
-                // 3. 将处理好的帧绘制到主画布
                 let dx = 0, dy = 0;
                 if (outputMode === 'sprite') {
                     const cols = parseInt(columns);
                     dx = (i % cols) * frameWidth;
                     dy = Math.floor(i / cols) * frameHeight;
                 } else {
-                    // GIF 模式每帧都画在 (0,0)，GIF 叠加前要清空
                     ctx.clearRect(0, 0, frameWidth, frameHeight);
                     dx = 0; 
                     dy = 0;
@@ -270,16 +338,13 @@
 
                 ctx.drawImage(tempCanvas, 0, 0, frameWidth, frameHeight, dx, dy, frameWidth, frameHeight);
                 
-                // 如果是 GIF，添加这一帧
                 if (gif) {
-                    // transparent: null 让库基于 alpha 通道处理透明
                     gif.addFrame(ctx, { copy: true, delay: delay, dispose: 2 });
                 }
                 
                 setProgress(Math.round(((i + 1) / totalFrames) * 90)); 
               }
 
-              // 导出结果
               if (outputMode === 'sprite') {
                   try {
                       const dataUrl = canvas.toDataURL('image/png');
@@ -304,7 +369,6 @@
               setError(err.message || "生成失败");
             } finally {
               if (outputMode === 'sprite') setIsProcessing(false);
-              // GIF 在 finished 回调中关闭 loading
             }
           };
 
@@ -487,8 +551,18 @@
 
                           {removeBg && (
                               <div className="space-y-4 bg-gray-900/50 p-4 rounded-lg border border-gray-700 animate-in fade-in slide-in-from-top-2 duration-200">
+                                  
+                                  {/* 预设按钮 */}
+                                  <button 
+                                      onClick={applyCheckerboardPreset}
+                                      className="w-full py-2 bg-gray-700 hover:bg-gray-600 text-xs text-white rounded flex items-center justify-center space-x-2 border border-gray-600 mb-2 transition-colors"
+                                  >
+                                      <GridIcon className="w-3 h-3 text-gray-300" />
+                                      <span>一键应用：去除灰白棋盘格</span>
+                                  </button>
+
                                   <div className="flex items-center justify-between">
-                                      <label className="text-xs text-gray-400">选择要扣除的颜色</label>
+                                      <label className="text-xs text-gray-400">主要颜色</label>
                                       <div className="flex items-center space-x-2">
                                           <span className="text-xs font-mono text-gray-500">{keyColor}</span>
                                           <input 
@@ -499,6 +573,31 @@
                                           />
                                       </div>
                                   </div>
+
+                                  <div className="flex items-center justify-between pt-2 border-t border-gray-800">
+                                      <div className="flex items-center space-x-2">
+                                          <input 
+                                            type="checkbox" 
+                                            id="enableSecond"
+                                            checked={enableSecondColor}
+                                            onChange={(e) => setEnableSecondColor(e.target.checked)}
+                                            className="rounded border-gray-600 bg-gray-700 text-indigo-500 focus:ring-indigo-500"
+                                          />
+                                          <label htmlFor="enableSecond" className="text-xs text-gray-400 select-none cursor-pointer">启用第二种颜色</label>
+                                      </div>
+                                      
+                                      {enableSecondColor && (
+                                          <div className="flex items-center space-x-2">
+                                              <span className="text-xs font-mono text-gray-500">{keyColor2}</span>
+                                              <input 
+                                                type="color" 
+                                                value={keyColor2}
+                                                onChange={(e) => setKeyColor2(e.target.value)}
+                                                className="border-0 p-0 rounded-full w-8 h-8 cursor-pointer ring-2 ring-gray-700 hover:ring-indigo-500 transition-all"
+                                              />
+                                          </div>
+                                      )}
+                                  </div>
                                   
                                   <div>
                                       <div className="flex justify-between mb-1">
@@ -508,13 +607,31 @@
                                       <input 
                                         type="range" 
                                         min="1" 
-                                        max="440" // sqrt(255^2 * 3) ≈ 441
+                                        max="440" 
                                         step="1"
                                         value={tolerance} 
                                         onChange={(e) => setTolerance(Number(e.target.value))} 
                                         className="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"
                                       />
-                                      <p className="text-[10px] text-gray-500 mt-1">值越大，扣除的颜色范围越广</p>
+                                  </div>
+
+                                  {/* 保护人物内部开关 */}
+                                  <div className="pt-2 border-t border-gray-800">
+                                      <div className="flex items-center justify-between">
+                                          <div className="flex items-center space-x-2 text-gray-300">
+                                            <ShieldIcon className="w-4 h-4 text-green-400" />
+                                            <span className="text-xs font-medium">只移除边缘背景 (保护人物)</span>
+                                          </div>
+                                          <div 
+                                            className={`w-10 h-5 flex items-center bg-gray-700 rounded-full p-1 cursor-pointer transition-colors ${protectBody ? 'bg-green-600' : ''}`}
+                                            onClick={() => setProtectBody(!protectBody)}
+                                          >
+                                            <div className={`bg-white w-3 h-3 rounded-full shadow-md transform transition-transform ${protectBody ? 'translate-x-5' : ''}`}></div>
+                                          </div>
+                                      </div>
+                                      <p className="text-[10px] text-gray-500 mt-1 pl-6">
+                                        开启后，仅移除与画面边缘连通的背景色，人物内部的相同颜色（如白衬衫、灰发）会被保留。
+                                      </p>
                                   </div>
                               </div>
                           )}
