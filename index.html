@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>视频转 GIF/精灵图工具 (支持透明/抠图)</title>
+    <title>视频转 GIF/精灵图工具 (支持透明/抠图/手动修补)</title>
     <!-- 引入 Tailwind CSS (样式) -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- 引入 React 和 ReactDOM -->
@@ -50,6 +50,11 @@
             border: 2px solid #4b5563;
             border-radius: 50%;
         }
+
+        /* 修复模式下的光标 */
+        .cursor-crosshair-custom {
+            cursor: crosshair;
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-gray-100 font-sans">
@@ -61,13 +66,15 @@
         // 图标组件
         const FilmIcon = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 3v18"/><path d="M3 7.5h4"/><path d="M3 12h18"/><path d="M3 16.5h4"/><path d="M17 3v18"/><path d="M17 7.5h4"/><path d="M17 16.5h4"/></svg>;
         const UploadIcon = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>;
-        const SettingsIcon = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>;
         const ImageIcon = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>;
         const DownloadIcon = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>;
         const AlertCircleIcon = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>;
         const WandIcon = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M15 4V2"/><path d="M15 16v-2"/><path d="M8 9h2"/><path d="M20 9h2"/><path d="M17.8 11.8 19 13"/><path d="M15 9h0"/><path d="M17.8 6.2 19 5"/><path d="m3 21 9-9"/><path d="M12.2 6.2 11 5"/></svg>;
         const GridIcon = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>;
         const ShieldIcon = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>;
+        const RepairIcon = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>;
+        const TrashIcon = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>;
+        const SettingsIcon = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>;
 
         const App = () => {
           const [videoUrl, setVideoUrl] = useState(null);
@@ -87,6 +94,10 @@
           const [tolerance, setTolerance] = useState(60); // 容差
           const [protectBody, setProtectBody] = useState(false); // 新增：保护人物内部
           
+          // 手动修补参数
+          const [manualSeeds, setManualSeeds] = useState([]); // 存储相对坐标 {x: 0~1, y: 0~1}
+          const [isRepairMode, setIsRepairMode] = useState(false);
+
           // 状态
           const [isProcessing, setIsProcessing] = useState(false);
           const [progress, setProgress] = useState(0);
@@ -104,6 +115,14 @@
             }
           }, [frameCount, outputMode]);
 
+          // 当 Manual Seeds 改变时，如果不忙，尝试自动重新生成
+          useEffect(() => {
+              if (generatedImage && !isProcessing && manualSeeds.length > 0) {
+                  // 可选：自动重新生成。为避免太卡，这里暂不自动触发，让用户手动点生成或在添加点时触发。
+                  // 为了体验更好，我们在添加点的时候直接触发 generate
+              }
+          }, [manualSeeds]);
+
           const handleFileChange = (event) => {
             const file = event.target.files[0];
             if (file) {
@@ -113,6 +132,7 @@
               setGeneratedImage(null);
               setError(null);
               setProgress(0);
+              setManualSeeds([]); // 重置修补点
             }
           };
 
@@ -135,8 +155,8 @@
             } : null;
           };
 
-          // 核心抠图算法 - 支持双色 & 连通域保护
-          const applyChromaKey = (ctx, width, height, colors, tolerance, protectBody) => {
+          // 核心抠图算法 - 支持双色 & 连通域保护 & 手动种子
+          const applyChromaKey = (ctx, width, height, colors, tolerance, protectBody, extraSeeds = []) => {
             const imageData = ctx.getImageData(0, 0, width, height);
             const data = imageData.data;
             
@@ -154,8 +174,8 @@
                 return false;
             };
 
-            if (!protectBody) {
-                // 原有逻辑：全局替换 (如果不开启保护)
+            if (!protectBody && extraSeeds.length === 0) {
+                // 原有逻辑：全局替换
                 for (let i = 0; i < data.length; i += 4) {
                     if (data[i+3] === 0) continue;
                     if (isMatch(data[i], data[i+1], data[i+2])) {
@@ -163,12 +183,12 @@
                     }
                 }
             } else {
-                // 新逻辑：从边缘泛洪 (Flood Fill) 保护内部
+                // 新逻辑：泛洪填充 (Flood Fill)
                 const stack = []; 
                 const getIndex = (x, y) => (y * width + x) * 4;
 
-                // 检查并推入栈
                 const checkAndPush = (x, y) => {
+                    if (x < 0 || x >= width || y < 0 || y >= height) return;
                     const idx = getIndex(x, y);
                     // 只有未处理过(非透明)且匹配颜色的才加入
                     if (data[idx+3] !== 0 && isMatch(data[idx], data[idx+1], data[idx+2])) {
@@ -177,33 +197,45 @@
                     }
                 };
 
-                // 1. 扫描四周边框作为种子点
-                // 上下边
-                for (let x = 0; x < width; x++) {
-                    checkAndPush(x, 0);
-                    checkAndPush(x, height - 1);
-                }
-                // 左右边
-                for (let y = 1; y < height - 1; y++) {
-                    checkAndPush(0, y);
-                    checkAndPush(width - 1, y);
+                // 1. 扫描四周边框作为种子点 (如果是保护模式)
+                if (protectBody) {
+                    for (let x = 0; x < width; x++) {
+                        checkAndPush(x, 0);
+                        checkAndPush(x, height - 1);
+                    }
+                    for (let y = 1; y < height - 1; y++) {
+                        checkAndPush(0, y);
+                        checkAndPush(width - 1, y);
+                    }
                 }
 
-                // 2. 广度优先搜索 (消除连通的背景)
+                // 2. 添加手动种子点
+                // 种子是 0-1 的相对坐标，需要转为像素坐标
+                for (let seed of extraSeeds) {
+                    const sx = Math.floor(seed.x * width);
+                    const sy = Math.floor(seed.y * height);
+                    // 检查种子点及其周围几个点，防止点偏了
+                    for(let dx = -1; dx <= 1; dx++) {
+                        for(let dy = -1; dy <= 1; dy++) {
+                           checkAndPush(sx + dx, sy + dy);
+                        }
+                    }
+                }
+
+                // 3. 广度优先搜索 (消除连通的背景)
                 while (stack.length > 0) {
                     const [cx, cy] = stack.pop();
                     
-                    // 4邻域
                     const neighbors = [
                         [cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]
                     ];
 
                     for (let [nx, ny] of neighbors) {
+                        // 边界检查内联在 checkAndPush 逻辑里会更慢，所以这里做
                         if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
                             const nIdx = getIndex(nx, ny);
-                            // 如果邻居也是目标色且没被消除
                             if (data[nIdx+3] !== 0 && isMatch(data[nIdx], data[nIdx+1], data[nIdx+2])) {
-                                data[nIdx+3] = 0; // 消除
+                                data[nIdx+3] = 0; 
                                 stack.push([nx, ny]);
                             }
                         }
@@ -236,12 +268,11 @@
           };
 
           const applyCheckerboardPreset = () => {
-              setKeyColor('#ffffff'); // 白色
-              setKeyColor2('#cccccc'); // 常见棋盘格灰色
+              setKeyColor('#ffffff'); 
+              setKeyColor2('#cccccc'); 
               setEnableSecondColor(true);
               setTolerance(50); 
               setRemoveBg(true);
-              // 自动开启人物保护，因为棋盘格双色极易误伤人物
               setProtectBody(true);
           };
 
@@ -281,9 +312,11 @@
                   }
               }
 
+              // Set canvas size
+              let cols = 1, rows = 1;
               if (outputMode === 'sprite') {
-                  const cols = parseInt(columns);
-                  const rows = Math.ceil(totalFrames / cols);
+                  cols = parseInt(columns);
+                  rows = Math.ceil(totalFrames / cols);
                   canvas.width = cols * frameWidth;
                   canvas.height = rows * frameHeight;
               } else {
@@ -321,13 +354,12 @@
                 }
 
                 if (removeBg) {
-                    // 传入 protectBody 参数
-                    applyChromaKey(tempCtx, frameWidth, frameHeight, colorsToRemove, tolerance, protectBody);
+                    // Pass manualSeeds to algorithm
+                    applyChromaKey(tempCtx, frameWidth, frameHeight, colorsToRemove, tolerance, protectBody, manualSeeds);
                 }
 
                 let dx = 0, dy = 0;
                 if (outputMode === 'sprite') {
-                    const cols = parseInt(columns);
                     dx = (i % cols) * frameWidth;
                     dy = Math.floor(i / cols) * frameHeight;
                 } else {
@@ -370,6 +402,51 @@
             } finally {
               if (outputMode === 'sprite') setIsProcessing(false);
             }
+          };
+
+          // 处理画布点击（手动修补）
+          const handleCanvasClick = (e) => {
+              if (!isRepairMode || !canvasRef.current || !generatedImage) return;
+
+              const canvas = canvasRef.current;
+              const rect = canvas.getBoundingClientRect();
+              
+              // 获取点击在 Canvas 上的实际坐标
+              const scaleX = canvas.width / rect.width;
+              const scaleY = canvas.height / rect.height;
+              const x = (e.clientX - rect.left) * scaleX;
+              const y = (e.clientY - rect.top) * scaleY;
+
+              // 计算单帧尺寸
+              const frameWidth = Math.floor(videoMeta.width * scale);
+              const frameHeight = Math.floor(videoMeta.height * scale);
+
+              // 计算相对于当前点击帧的局部坐标 (normalized 0-1)
+              // 无论是 Sprite 还是 GIF (GIF 只有一帧显示但逻辑类似，不过 GIF 模式下 canvas 只有一帧大)
+              let localX, localY;
+              
+              if (outputMode === 'sprite') {
+                  // Sprite: 需要对 frameWidth 取余
+                  localX = x % frameWidth;
+                  localY = y % frameHeight;
+              } else {
+                  // GIF: 直接就是当前坐标
+                  localX = x;
+                  localY = y;
+              }
+              
+              const seed = { 
+                  x: localX / frameWidth, 
+                  y: localY / frameHeight 
+              };
+
+              // 添加种子并重新生成
+              setManualSeeds(prev => [...prev, seed]);
+              
+              // 简单防抖，延迟一丢丢触发生成，让用户看到 UI 反应
+              setTimeout(() => {
+                 generate();
+              }, 50);
           };
 
           useEffect(() => {
@@ -630,12 +707,43 @@
                                           </div>
                                       </div>
                                       <p className="text-[10px] text-gray-500 mt-1 pl-6">
-                                        开启后，仅移除与画面边缘连通的背景色，人物内部的相同颜色（如白衬衫、灰发）会被保留。
+                                        开启后，仅移除与边缘连通的背景。如果裤缝是封闭的，会被保留。
                                       </p>
                                   </div>
                               </div>
                           )}
                       </div>
+                      
+                      {/* 手动修补入口 */}
+                      {removeBg && protectBody && (
+                          <div className="pt-2 border-t border-gray-700">
+                                <p className="text-[10px] text-yellow-500 mb-2">如果裤缝没扣掉，请开启下方修补模式并点击预览图。</p>
+                                <div className="flex space-x-2">
+                                    <button 
+                                        onClick={() => setIsRepairMode(!isRepairMode)}
+                                        className={`flex-1 py-2 text-xs rounded flex items-center justify-center space-x-1 border transition-colors
+                                            ${isRepairMode 
+                                                ? 'bg-yellow-600/20 border-yellow-500 text-yellow-400' 
+                                                : 'bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600'
+                                            }`}
+                                    >
+                                        <RepairIcon className="w-3 h-3" />
+                                        <span>{isRepairMode ? '修补模式已开启 (点击图片)' : '开启手动修补'}</span>
+                                    </button>
+                                    
+                                    {manualSeeds.length > 0 && (
+                                        <button 
+                                            onClick={() => { setManualSeeds([]); generate(); }}
+                                            className="px-3 py-2 bg-red-900/30 border border-red-800 text-red-400 rounded hover:bg-red-900/50"
+                                            title="清除所有修补点"
+                                        >
+                                            <TrashIcon className="w-3 h-3" />
+                                        </button>
+                                    )}
+                                </div>
+                          </div>
+                      )}
+
 
                       {videoUrl && (
                         <div className="p-3 rounded text-xs space-y-1 bg-gray-900 border-transparent text-gray-400">
@@ -696,7 +804,9 @@
                         )}
                      </div>
 
-                     <div className="flex-1 overflow-auto bg-gray-900/50 p-4 relative flex items-center justify-center custom-scrollbar">
+                     <div 
+                        className="flex-1 overflow-auto bg-gray-900/50 p-4 relative flex items-center justify-center custom-scrollbar"
+                     >
                         <canvas ref={canvasRef} className="hidden" />
 
                         {error && (
@@ -717,7 +827,7 @@
                         )}
 
                         {isProcessing && (
-                          <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900/80 z-10 backdrop-blur-sm">
+                          <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900/80 z-10 backdrop-blur-sm pointer-events-none">
                              <div className="w-64 h-4 bg-gray-700 rounded-full overflow-hidden mb-2">
                                 <div 
                                   className="h-full bg-indigo-500 transition-all duration-300 ease-out"
@@ -731,12 +841,19 @@
                         )}
                         
                         {generatedImage && (
-                          <img 
-                            src={generatedImage} 
-                            alt="Generated Output" 
-                            className="max-w-none shadow-2xl border border-gray-700 bg-[url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAMUlEQVQ4T2NkYGAQYcAP3uCTZhw1gGGYhAGBZIA/nYDCgBDAm9BGDWCEAvgUGjZGYwIAxuoHr4hHvAQAAAAASUVORK5CYII=')] bg-repeat" 
-                            /* 上面加了一个棋盘格背景，方便看透明效果 */
-                          />
+                          <div className="relative group">
+                              <img 
+                                src={generatedImage} 
+                                alt="Generated Output" 
+                                className={`max-w-none shadow-2xl border border-gray-700 bg-[url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAMUlEQVQ4T2NkYGAQYcAP3uCTZhw1gGGYhAGBZIA/nYDCgBDAm9BGDWCEAvgUGjZGYwIAxuoHr4hHvAQAAAAASUVORK5CYII=')] bg-repeat ${isRepairMode ? 'cursor-crosshair-custom' : ''}`}
+                                onClick={handleCanvasClick}
+                              />
+                              {isRepairMode && (
+                                  <div className="absolute top-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded pointer-events-none border border-yellow-500/50">
+                                      点击画面中的杂色/空隙进行消除
+                                  </div>
+                              )}
+                          </div>
                         )}
                      </div>
                   </div>
