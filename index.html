@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>视频转 GIF/精灵图工具 (支持透明/抠图/逐帧精修)</title>
+    <title>视频转 GIF/精灵图工具 (修复版)</title>
     <!-- 引入 Tailwind CSS (样式) -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- 引入 React 和 ReactDOM -->
@@ -67,9 +67,9 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useRef, useEffect, useMemo } = React;
+        const { useState, useRef, useEffect } = React;
 
-        // 图标组件
+        // --- 图标组件定义 ---
         const FilmIcon = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 3v18"/><path d="M3 7.5h4"/><path d="M3 12h18"/><path d="M3 16.5h4"/><path d="M17 3v18"/><path d="M17 7.5h4"/><path d="M17 16.5h4"/></svg>;
         const UploadIcon = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>;
         const ImageIcon = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>;
@@ -114,6 +114,7 @@
 
           // 状态
           const [isProcessing, setIsProcessing] = useState(false);
+          const [progressText, setProgressText] = useState("");
           const [progress, setProgress] = useState(0);
           const [generatedImage, setGeneratedImage] = useState(null);
           const [error, setError] = useState(null);
@@ -138,6 +139,7 @@
               setGeneratedImage(null);
               setError(null);
               setProgress(0);
+              setProgressText("");
               setManualSeeds([]);
               rawFramesRef.current = []; // 清空缓存
             }
@@ -189,7 +191,7 @@
             } else {
                 // 泛洪填充
                 const stack = []; 
-                const visited = new Uint8Array(width * height); // 辅助数组避免重复入栈，提升性能
+                const visited = new Uint8Array(width * height);
                 const getIdx = (x, y) => (y * width + x);
 
                 const checkAndPush = (x, y) => {
@@ -255,7 +257,16 @@
           // 核心生成逻辑
           const generate = async () => {
             if (!videoRef.current || !canvasRef.current) return;
-            setIsProcessing(true); setProgress(0); setError(null); setGeneratedImage(null);
+            if (videoMeta.width === 0 || videoMeta.height === 0) {
+                setError("视频数据尚未加载，请稍候再试");
+                return;
+            }
+
+            setIsProcessing(true); 
+            setProgress(0); 
+            setProgressText("初始化...");
+            setError(null); 
+            setGeneratedImage(null);
             
             // 清空旧缓存
             rawFramesRef.current = [];
@@ -271,10 +282,20 @@
 
               let gif = null;
               if (outputMode === 'gif') {
+                  setProgressText("加载 GIF 编码器...");
+                  // 检查 GIF 库是否存在
+                  if (typeof GIF === 'undefined') {
+                      throw new Error("GIF 库加载失败，请检查网络连接");
+                  }
                   try {
+                      // 尝试加载 worker
                       const workerBlob = await fetch('https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.worker.js').then(r => r.blob());
                       gif = new GIF({ workers: 2, quality: 10, width: frameWidth, height: frameHeight, workerScript: URL.createObjectURL(workerBlob) });
-                  } catch (e) { throw new Error("GIF库初始化失败"); }
+                  } catch (e) {
+                      console.warn("GIF worker fetch failed, falling back to script URL (might fail CSP)", e);
+                      // 后备方案，可能会遇到跨域 worker 限制
+                      gif = new GIF({ workers: 2, quality: 10, width: frameWidth, height: frameHeight, workerScript: 'https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.worker.js' });
+                  }
               }
 
               // Canvas尺寸
@@ -302,6 +323,7 @@
               }
 
               for (let i = 0; i < totalFrames; i++) {
+                setProgressText(`提取第 ${i + 1} / ${totalFrames} 帧...`);
                 if (!videoRef.current) break;
                 const time = interval * (i + 1);
                 await seekToTime(video, time);
@@ -309,8 +331,6 @@
                 tempCtx.clearRect(0, 0, frameWidth, frameHeight);
                 if (video.readyState >= 2) {
                     tempCtx.drawImage(video, 0, 0, videoMeta.width, videoMeta.height, 0, 0, frameWidth, frameHeight);
-                    // 缓存原始帧 (ImageBitmap 性能更好，但需要异步，这里简单用 ImageData 或 Canvas)
-                    // 为了后续处理方便，这里直接深拷贝 ImageData
                     const rawData = tempCtx.getImageData(0, 0, frameWidth, frameHeight);
                     rawFramesRef.current.push(rawData);
                 }
@@ -332,25 +352,49 @@
               }
 
               if (outputMode === 'sprite') {
+                  setProgressText("生成图片中...");
                   setGeneratedImage(canvas.toDataURL('image/png'));
                   setProgress(100);
+                  setIsProcessing(false);
               } else if (gif) {
                   setProgress(95);
-                  gif.on('finished', blob => { setGeneratedImage(URL.createObjectURL(blob)); setProgress(100); });
-                  gif.render();
+                  setProgressText("正在编码 GIF (请耐心等待)...");
+                  
+                  // GIF 超时保护
+                  const timeoutId = setTimeout(() => {
+                      if (progress < 100) {
+                          setError("GIF 生成超时。建议减少帧数或尺寸。");
+                          setIsProcessing(false);
+                          // 尝试停止 GIF 渲染
+                          if(gif && gif.running) gif.abort();
+                      }
+                  }, 20000); // 20秒超时
+
+                  gif.on('finished', blob => { 
+                      clearTimeout(timeoutId);
+                      setGeneratedImage(URL.createObjectURL(blob)); 
+                      setProgress(100); 
+                      setIsProcessing(false);
+                  });
+                  
+                  try {
+                    gif.render();
+                  } catch(e) {
+                      clearTimeout(timeoutId);
+                      throw e;
+                  }
               }
             } catch (err) {
-              console.error(err); setError(err.message || "生成失败");
-            } finally {
-              if (outputMode === 'sprite') setIsProcessing(false);
+              console.error(err); 
+              setError(err.message || "生成失败，请检查控制台日志");
+              setIsProcessing(false);
             }
           };
 
           // --- 逐帧精修逻辑 ---
-          
           const openInspector = () => {
               if (rawFramesRef.current.length === 0) {
-                  alert("请先点击生成的精灵图或GIF，确保缓存已建立。");
+                  alert("暂无缓存数据，请先重新生成一次。");
                   return;
               }
               setShowFrameInspector(true);
@@ -396,7 +440,6 @@
           // 关闭 Inspector 时，重新生成最终结果
           const closeInspector = () => {
               setShowFrameInspector(false);
-              // 如果有修补点，触发重新生成以应用到最终的大图/GIF
               if (manualSeeds.length > 0) {
                   generate();
               }
@@ -573,7 +616,7 @@
                       )}
 
                       <button onClick={generate} disabled={!videoUrl || isProcessing} className={`w-full py-3 px-4 rounded-lg font-bold text-white transition-all flex items-center justify-center space-x-2 ${!videoUrl ? 'bg-gray-700 cursor-not-allowed text-gray-500' : isProcessing ? 'bg-indigo-700 cursor-wait opacity-80' : 'bg-indigo-600 hover:bg-indigo-500 hover:shadow-lg hover:shadow-indigo-500/25 active:transform active:scale-95'}`}>
-                        {isProcessing ? <><div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div><span>{progress < 100 ? `处理中 ${progress}%` : '最终渲染中...'}</span></> : <><ImageIcon className="w-5 h-5" /><span>{outputMode === 'sprite' ? '生成精灵图' : '生成 GIF 动图'}</span></>}
+                        {isProcessing ? <><div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div><span>{progress < 100 ? `${progressText || '处理中'} ${progress}%` : '最终处理...'}</span></> : <><ImageIcon className="w-5 h-5" /><span>{outputMode === 'sprite' ? '生成精灵图' : '生成 GIF 动图'}</span></>}
                       </button>
                     </div>
                   </div>
@@ -611,7 +654,7 @@
                                  <div className="w-64 h-4 bg-gray-700 rounded-full overflow-hidden mb-2">
                                     <div className="h-full bg-indigo-500 transition-all duration-300 ease-out" style={{ width: `${progress}%` }}></div>
                                  </div>
-                                 <p className="text-indigo-300 text-sm font-mono animate-pulse">{outputMode === 'gif' && progress > 90 ? '正在编码 GIF (可能需要几秒)...' : `正在提取帧: ${progress}%`}</p>
+                                 <p className="text-indigo-300 text-sm font-mono animate-pulse mt-2">{progressText}</p>
                               </div>
                             )}
                             
